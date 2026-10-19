@@ -3,7 +3,7 @@
    Versão: v1 (sempre que mudar o app, aumente esse número)
    ===================================================== */
 
-const CACHE_NAME = 'my-studio-pro-v1';
+const CACHE_NAME = 'my-studio-pro-v2';
 
 const ARQUIVOS_CACHE = [
   './',
