@@ -585,8 +585,12 @@ label.field-label{display:block;font-size:.72rem;font-weight:600;color:var(--tex
         <select id="agendamentoCliente" required></select>
       </div>
       <div class="form-group">
-        <label class="field-label">Serviço</label>
-        <select id="agendamentoServico" required></select>
+        <label class="field-label">Serviços</label>
+        <div id="agendamentoServicosList" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px">
+          <select id="agendamentoServicoSelect" style="flex:1"></select>
+          <button type="button" class="btn btn-primary btn-sm" style="white-space:nowrap;padding:12px 18px" onclick="adicionarServicoAoAgendamento()"><i class="fas fa-plus"></i> Add</button>
+        </div>
       </div>
       <div class="filter-grid-2">
         <div class="form-group">
@@ -599,9 +603,10 @@ label.field-label{display:block;font-size:.72rem;font-weight:600;color:var(--tex
         </div>
       </div>
       <div class="preview-box" id="agendamentoPreview" style="display:none">
-        <div class="pv-title"><i class="fas fa-calculator"></i> Valores</div>
+        <div class="pv-title"><i class="fas fa-calculator"></i> Totais do Agendamento</div>
         <div class="pv-row"><span>Valor cobrado</span><b id="agValor">R$ 0</b></div>
         <div class="pv-row"><span>Custo do material</span><b id="agCusto">R$ 0</b></div>
+        <div class="pv-row"><span>Duração total</span><b id="agDuracao">0min</b></div>
         <div class="pv-row"><span>Empresa recebe (custo + 5%)</span><b id="agEmpresa" style="color:var(--primary-dark)">R$ 0</b></div>
         <div class="pv-row"><span>Lucro do dono</span><b id="agLucro" style="color:var(--success-dark)">R$ 0</b></div>
       </div>
@@ -838,6 +843,55 @@ let authMode = 'login';
 let filtroTempo = 'mes';
 let charts = { pie: null, bar: null };
 let agendamentoParaConcluir = null;
+let agendamentoServicosSelecionados = [];
+
+function getServicosDoAgendamento(a) {
+  if (a.servicos && Array.isArray(a.servicos) && a.servicos.length) return a.servicos;
+  return [{ id: a.servico_id || '', nome: a.servico_nome || 'Serviço', valor: a.valor_cobrado || 0, custo: a.custo || 0, duracao: a.duracao_min || 0 }];
+}
+
+function nomeServicos(a) {
+  return getServicosDoAgendamento(a).map(s => s.nome).join(' + ');
+}
+
+function renderServicosAgendamento() {
+  const cont = document.getElementById('agendamentoServicosList');
+  if (!agendamentoServicosSelecionados.length) {
+    cont.innerHTML = '<div style="padding:14px;text-align:center;font-size:.8rem;color:var(--text-soft);background:var(--surface-2);border-radius:10px;border:1px dashed var(--border-strong)"><i class="fas fa-spa" style="opacity:.4"></i><br>Nenhum serviço adicionado ainda</div>';
+    return;
+  }
+  cont.innerHTML = agendamentoServicosSelecionados.map((s, i) => `
+    <div class="list-item" style="padding:10px 12px;margin-bottom:6px">
+      <div class="li-info">
+        <h4 style="font-size:.85rem">${esc(s.nome)}</h4>
+        <p style="font-size:.72rem">${fmt(s.valor)} · ${s.duracao||0}min</p>
+      </div>
+      <button type="button" class="btn btn-xs btn-ghost" style="color:var(--danger)" onclick="removerServicoDoAgendamento(${i})"><i class="fas fa-times"></i></button>
+    </div>
+  `).join('');
+}
+
+window.adicionarServicoAoAgendamento = function() {
+  const sid = document.getElementById('agendamentoServicoSelect').value;
+  if (!sid) return;
+  const s = dados.servicos.find(x => x.id === sid);
+  if (!s) return;
+  if (agendamentoServicosSelecionados.some(x => x.id === sid)) {
+    alert('Este serviço já foi adicionado.');
+    return;
+  }
+  agendamentoServicosSelecionados.push({
+    id: s.id, nome: s.nome, valor: s.valor, custo: s.custo, duracao: s.duracao || 0
+  });
+  renderServicosAgendamento();
+  atualizarPreviewAgendamento();
+};
+
+window.removerServicoDoAgendamento = function(i) {
+  agendamentoServicosSelecionados.splice(i, 1);
+  renderServicosAgendamento();
+  atualizarPreviewAgendamento();
+};
 
 const dados = {
   config: { nomeEmpresa:'My Studio Pro', nomeDono:'', logoBase64:'',
@@ -1127,7 +1181,7 @@ function renderAgendaCompacta(lista){
       </div>
       <div class="agenda-body" style="margin-bottom:8px">
         <div class="agenda-cliente" style="font-size:.9rem">${esc(a.cliente_nome)}</div>
-        <div class="agenda-servico" style="font-size:.78rem">${esc(a.servico_nome)} — ${fmt(a.valor_cobrado)}</div>
+        <div class="agenda-servico" style="font-size:.78rem">${esc(nomeServicos(a))} — ${fmt(a.valor_cobrado)}</div>
       </div>
       <div class="agenda-actions">
         <button class="btn btn-sm btn-outline" style="padding:6px 10px" onclick="whatsappLembrete('${a.id}')"><i class="fab fa-whatsapp" style="color:#25D366"></i> Lembrete</button>
@@ -1140,7 +1194,12 @@ function renderAgendaCompacta(lista){
 function renderCharts(periodo){
   const atends = periodo.filter(t=>t.tipo==='atendimento');
   const mapaServ = {};
-  atends.forEach(t=>mapaServ[t.servico_nome] = (mapaServ[t.servico_nome]||0) + 1);
+  atends.forEach(t=>{
+    const servs = (t.servicos && Array.isArray(t.servicos) && t.servicos.length) ? t.servicos : [{nome: t.servico_nome}];
+    servs.forEach(s => {
+      if (s.nome) mapaServ[s.nome] = (mapaServ[s.nome]||0) + 1;
+    });
+  });
   if(charts.pie) charts.pie.destroy();
   charts.pie = new Chart(document.getElementById('pieChart'), {
     type:'doughnut',
@@ -1176,7 +1235,10 @@ function atualizarSelects(){
   const optCli = dados.clientes.map(c=>`<option value="${c.id}">${esc(c.nome)}</option>`).join('');
 
   document.getElementById('agendamentoCliente').innerHTML = optCli || '<option value="">Cadastre uma cliente primeiro</option>';
-  document.getElementById('agendamentoServico').innerHTML = optServ || '<option value="">Cadastre um serviço primeiro</option>';
+  const selServ = document.getElementById('agendamentoServicoSelect');
+  const curVal = selServ.value;
+  selServ.innerHTML = optServ || '<option value="">Cadastre um serviço primeiro</option>';
+  if (curVal) selServ.value = curVal;
   document.getElementById('entradaCliente').innerHTML = '<option value="">— Sem vínculo —</option>' + optCli;
   document.getElementById('entradaServico').innerHTML = optServ || '<option value="">Cadastre um serviço primeiro</option>';
 }
@@ -1247,7 +1309,7 @@ function renderAgendaItem(a){
     </div>
     <div class="agenda-body">
       <div class="agenda-cliente">${esc(a.cliente_nome)}</div>
-      <div class="agenda-servico">${esc(a.servico_nome)} · ${a.duracao_min||''}min</div>
+      <div class="agenda-servico">${esc(nomeServicos(a))} · ${a.duracao_min||''}min</div>
       <div class="agenda-valor">${fmt(a.valor_cobrado)}</div>
     </div>
     <div class="agenda-actions">
@@ -1277,6 +1339,8 @@ window.abrirModalAgendamento = function(clienteId){
   document.getElementById('agendamentoModalTitle').innerText='Novo Agendamento';
   document.getElementById('agendamentoData').value = hojeLocal();
   if(clienteId) document.getElementById('agendamentoCliente').value = clienteId;
+  agendamentoServicosSelecionados = [];
+  renderServicosAgendamento();
   atualizarPreviewAgendamento();
 };
 window.editarAgendamento = function(id){
@@ -1286,37 +1350,38 @@ window.editarAgendamento = function(id){
   document.getElementById('agendamentoModalTitle').innerText='Editar Agendamento';
   document.getElementById('agendamentoId').value = a.id;
   document.getElementById('agendamentoCliente').value = a.cliente_id;
-  document.getElementById('agendamentoServico').value = a.servico_id;
   document.getElementById('agendamentoData').value = a.data;
   document.getElementById('agendamentoHora').value = a.hora;
   document.getElementById('agendamentoObs').value = a.obs||'';
+  agendamentoServicosSelecionados = getServicosDoAgendamento(a).map(s => ({...s}));
+  renderServicosAgendamento();
   atualizarPreviewAgendamento();
 };
 
 function atualizarPreviewAgendamento(){
-  const sid = document.getElementById('agendamentoServico').value;
-  const s = dados.servicos.find(x=>x.id===sid);
   const prev = document.getElementById('agendamentoPreview');
-  if(!s){ prev.style.display='none'; return; }
-  const empresa = s.custo * TAXA_EMPRESA;
-  const lucro = s.valor - empresa;
-  document.getElementById('agValor').innerText = fmt(s.valor);
-  document.getElementById('agCusto').innerText = fmt(s.custo);
+  if(!agendamentoServicosSelecionados.length){ prev.style.display='none'; return; }
+  const totalValor = agendamentoServicosSelecionados.reduce((a,s) => a + (s.valor||0), 0);
+  const totalCusto = agendamentoServicosSelecionados.reduce((a,s) => a + (s.custo||0), 0);
+  const totalDur = agendamentoServicosSelecionados.reduce((a,s) => a + (s.duracao||0), 0);
+  const empresa = totalCusto * TAXA_EMPRESA;
+  const lucro = totalValor - empresa;
+  document.getElementById('agValor').innerText = fmt(totalValor);
+  document.getElementById('agCusto').innerText = fmt(totalCusto);
+  document.getElementById('agDuracao').innerText = totalDur + 'min';
   document.getElementById('agEmpresa').innerText = fmt(empresa);
   document.getElementById('agLucro').innerText = fmt(lucro);
   prev.style.display='block';
 }
-document.getElementById('agendamentoServico').addEventListener('change', atualizarPreviewAgendamento);
 
 document.getElementById('formAgendamento').addEventListener('submit', async e=>{
   e.preventDefault();
   const btn = document.getElementById('btnSalvarAgendamento');
   const id = document.getElementById('agendamentoId').value;
   const clienteId = document.getElementById('agendamentoCliente').value;
-  const servicoId = document.getElementById('agendamentoServico').value;
   const cliente = dados.clientes.find(c=>c.id===clienteId);
-  const servico = dados.servicos.find(s=>s.id===servicoId);
-  if(!cliente || !servico) return alert('Selecione cliente e serviço.');
+  if(!cliente) return alert('Selecione uma cliente.');
+  if(!agendamentoServicosSelecionados.length) return alert('Adicione pelo menos um serviço.');
 
   const data = document.getElementById('agendamentoData').value;
   const hora = document.getElementById('agendamentoHora').value;
@@ -1327,10 +1392,19 @@ document.getElementById('formAgendamento').addEventListener('submit', async e=>{
   if(conflito && !confirm(`Já existe agendamento às ${hora} (${conflito.cliente_nome}). Continuar?`)) return;
 
   btn.innerText='Salvando...'; btn.disabled=true;
+
+  const totalValor = agendamentoServicosSelecionados.reduce((a,s) => a + (s.valor||0), 0);
+  const totalCusto = agendamentoServicosSelecionados.reduce((a,s) => a + (s.custo||0), 0);
+  const totalDur = agendamentoServicosSelecionados.reduce((a,s) => a + (s.duracao||0), 0);
+
   const obj = {
     cliente_id: cliente.id, cliente_nome: cliente.nome, cliente_telefone: cliente.telefone||'',
-    servico_id: servico.id, servico_nome: servico.nome, duracao_min: servico.duracao||0,
-    valor_cobrado: servico.valor, custo: servico.custo,
+    servicos: agendamentoServicosSelecionados.map(s => ({...s})),
+    servico_id: agendamentoServicosSelecionados.length === 1 ? agendamentoServicosSelecionados[0].id : '',
+    servico_nome: agendamentoServicosSelecionados.map(s => s.nome).join(' + '),
+    duracao_min: totalDur,
+    valor_cobrado: totalValor,
+    custo: totalCusto,
     data, hora, obs, uid: usuarioLogado.uid
   };
   try {
@@ -1356,15 +1430,19 @@ window.excluirAgendamento = async function(id){
 window.abrirConcluir = function(id){
   const a = dados.agendamentos.find(x=>x.id===id); if(!a) return;
   agendamentoParaConcluir = a;
-  const empresa = a.custo * TAXA_EMPRESA;
-  const lucro = a.valor_cobrado - empresa;
+  const servicos = getServicosDoAgendamento(a);
+  const totalValor = servicos.reduce((acc,s) => acc + (s.valor||0), 0);
+  const totalCusto = servicos.reduce((acc,s) => acc + (s.custo||0), 0);
+  const empresa = totalCusto * TAXA_EMPRESA;
+  const lucro = totalValor - empresa;
   document.getElementById('concluirInfo').innerHTML = `
     <div class="info-banner">
       <i class="fas fa-info-circle"></i>
       <div>
         <b>${esc(a.cliente_nome)}</b><br>
-        ${esc(a.servico_nome)} · ${fmtData(a.data)} às ${a.hora}<br>
-        Valor: <b>${fmt(a.valor_cobrado)}</b> · Custo: <b>${fmt(a.custo)}</b>
+        ${servicos.map(s => esc(s.nome)).join(' + ')}<br>
+        ${fmtData(a.data)} às ${a.hora}<br>
+        Valor: <b>${fmt(totalValor)}</b> · Custo: <b>${fmt(totalCusto)}</b>
       </div>
     </div>`;
   document.getElementById('concluirEmpresa').innerText = fmt(empresa);
@@ -1379,17 +1457,21 @@ document.getElementById('btnConfirmarConcluir').addEventListener('click', async 
   const btn = document.getElementById('btnConfirmarConcluir');
   btn.innerText='Salvando...'; btn.disabled=true;
   try {
-    const empresa = a.custo * TAXA_EMPRESA;
-    const lucro = a.valor_cobrado - empresa;
+    const servicos = getServicosDoAgendamento(a);
+    const totalValor = servicos.reduce((acc,s) => acc + (s.valor||0), 0);
+    const totalCusto = servicos.reduce((acc,s) => acc + (s.custo||0), 0);
+    const empresa = totalCusto * TAXA_EMPRESA;
+    const lucro = totalValor - empresa;
     const nova = {
       tipo:'atendimento',
       data: a.data,
       cliente_id: a.cliente_id,
       cliente_nome: a.cliente_nome,
-      servico_id: a.servico_id,
-      servico_nome: a.servico_nome,
-      valor_cobrado: a.valor_cobrado,
-      custo: a.custo,
+      servicos: servicos.map(s => ({...s})),
+      servico_id: servicos.length === 1 ? servicos[0].id : '',
+      servico_nome: servicos.map(s => s.nome).join(' + '),
+      valor_cobrado: totalValor,
+      custo: totalCusto,
       empresa_valor: empresa,
       lucro_dono: lucro,
       agendamento_id: a.id,
@@ -1678,7 +1760,7 @@ window.verFicha = function(id){
       <div class="list-item" style="padding:10px">
         <div class="li-info">
           <h4 style="font-size:.85rem">${fmtData(a.data)} · ${a.hora}</h4>
-          <p style="font-size:.75rem">${esc(a.servico_nome)}</p>
+                  <p style="font-size:.75rem">${esc(nomeServicos(a))}</p>
         </div>
         <div class="li-value neutral" style="font-size:.82rem">${fmt(a.valor_cobrado)}</div>
       </div>
