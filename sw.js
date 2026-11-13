@@ -3,13 +3,13 @@
    Versão: v1 (sempre que mudar o app, aumente esse número)
    ===================================================== */
 
-const CACHE_NAME = 'my-studio-pro-v4';
+const CACHE_NAME = 'my-studio-pro-v5';
 
 const ARQUIVOS_CACHE = [
   './',
   './index.html',
   './manifest.json',
-  './icone-512.png',
+  './icone-192.png',
   './icone-512.png'
 ];
 

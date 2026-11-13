@@ -1124,63 +1124,44 @@ function gerenciarAcesso30Dias(user){
   const uid = user.uid;
 
   const refConfig = doc(db, 'configuracoes', uid);
-  const refAssinatura = doc(db, 'assinaturas', email);
 
   unsubAssinatura = onSnapshot(refConfig, async snap=>{
     const agora = new Date();
     const dados = snap.exists() ? snap.data() : {};
 
-    // Se NÃO tem dataExpiracao:
-    // Inicializa 30 dias a partir de agora!
-    if(!dados.dataExpiracao){
-      const dataExp = new Date(agora.getTime() + (30 * 24 * 60 * 60 * 1000));
-      const camposIniciais = {
-        email: email,
-        uid: uid,
-        status: 'ativo',
-        statusAssinatura: 'ativo',
-        dataInicioAcesso: agora.toISOString(),
-        dataExpiracao: dataExp.toISOString(),
-        diasRestantes: 30,
-        ultimoLogin: agora.toISOString()
-      };
-
-      // 1. Grava no documento configuracoes/{uid} (garantido pelas regras do Firestore)
-      try {
-        await setDoc(refConfig, camposIniciais, { merge: true });
-      } catch(e){
-        console.error('[Assinatura] Erro ao gravar configuracoes:', e);
-      }
-
-      // 2. Grava também em assinaturas/{email} para busca por email
-      try {
-        await setDoc(refAssinatura, { ...camposIniciais, criadoEm: agora.toISOString() }, { merge: true });
-      } catch(e){
-        console.warn('[Assinatura] Aviso ao gravar assinaturas:', e);
-      }
-
-      liberarAcesso(user, 30, dataExp);
-      return;
+    // Define data de expiração (se ainda não existir, cria +30 dias)
+    let dataExp;
+    if(dados.dataExpiracao){
+      dataExp = new Date(dados.dataExpiracao);
+    } else {
+      dataExp = new Date(agora.getTime() + (30 * 24 * 60 * 60 * 1000));
     }
 
-    const dataExp = new Date(dados.dataExpiracao);
     const diffMs = dataExp.getTime() - agora.getTime();
     const diasRestantes = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 
-    // Atualiza diasRestantes se mudou
-    if(dados.diasRestantes !== diasRestantes){
-      setDoc(refConfig, {
-        diasRestantes: diasRestantes,
-        ultimoLogin: agora.toISOString(),
-        email: email
-      }, { merge: true }).catch(()=>{});
+    const dadosAtualizados = {
+      email: email,
+      uid: uid,
+      status: 'ativo',
+      statusAssinatura: 'ativo',
+      dataInicioAcesso: dados.dataInicioAcesso || agora.toISOString(),
+      dataExpiracao: dataExp.toISOString(),
+      diasRestantes: diasRestantes,
+      ultimoLogin: agora.toISOString()
+    };
 
-      setDoc(refAssinatura, {
-        diasRestantes: diasRestantes,
-        ultimoLogin: agora.toISOString(),
-        email: email
-      }, { merge: true }).catch(()=>{});
-    }
+    // Grava SEMPRE na coleção 'usuarios' (por email e uid) e em 'configuracoes'
+    Promise.allSettled([
+      setDoc(doc(db, 'usuarios', email), dadosAtualizados, { merge: true }),
+      setDoc(doc(db, 'usuarios', uid), dadosAtualizados, { merge: true }),
+      setDoc(doc(db, 'assinaturas', email), dadosAtualizados, { merge: true }),
+      setDoc(refConfig, dadosAtualizados, { merge: true })
+    ]).then(res=>{
+      console.log('[Assinatura] Dados salvos em usuarios e configuracoes:', res);
+    }).catch(err=>{
+      console.warn('[Assinatura] Erro ao gravar:', err);
+    });
 
     // Se venceu os 30 dias:
     if(agora > dataExp && dados.status !== 'ativo_vitalicio'){
@@ -2291,7 +2272,7 @@ document.getElementById('installAppBtn')?.addEventListener('click', async () => 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      const reg = await navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' });
+      const reg = await navigator.serviceWorker.register('sw.js?v=5', { updateViaCache: 'none' });
       reg.update();
       reg.addEventListener('updatefound', () => {
         const novo = reg.installing;
