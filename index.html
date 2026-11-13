@@ -309,6 +309,48 @@ label.field-label{display:block;font-size:.72rem;font-weight:600;color:var(--tex
   </div>
 </div>
 
+<!-- TELA DE BLOQUEIO / RENOVAÇÃO DE ASSINATURA -->
+<div class="auth-screen" id="paywallScreen" style="display:none">
+  <div class="auth-box" style="max-width:420px;text-align:center">
+    <div class="logo-badge" style="background:linear-gradient(135deg,var(--gold),var(--primary))">
+      <i class="fas fa-crown"></i>
+    </div>
+    <h1 style="font-size:1.5rem;margin-bottom:6px">Acesso ao My Studio Pro</h1>
+    <p class="subtitle" style="margin-bottom:18px" id="paywallSubtitle">
+      Assinatura necessária para utilizar o aplicativo.
+    </p>
+
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;text-align:left;font-size:.82rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="color:var(--text-soft)">Conta:</span>
+        <strong id="paywallUserEmail" style="word-break:break-all;color:var(--text)"></strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="color:var(--text-soft)">Status:</span>
+        <span id="paywallStatusBadge" class="tag tag-red">Pendente</span>
+      </div>
+    </div>
+
+    <p id="paywallInfoText" style="font-size:.85rem;color:var(--text-2);margin-bottom:20px;line-height:1.4">
+      Este aplicativo não possui período de teste gratuito. Para liberar seu acesso, adquira ou renove seu plano de 30 dias.
+    </p>
+
+    <!-- BOTAO CHECKOUT (link configuravel) -->
+    <a href="#" id="btnCheckoutPaywall" target="_blank" class="btn btn-primary btn-block" style="text-decoration:none;font-weight:600;margin-bottom:10px">
+      <i class="fas fa-lock-open"></i> Renovar / Adquirir Acesso
+    </a>
+
+    <!-- SUPORTE DISCRETO -->
+    <a href="#" id="btnSuportePaywall" target="_blank" class="btn btn-outline btn-block" style="text-decoration:none;margin-bottom:14px">
+      <i class="fab fa-whatsapp" style="color:#25D366;font-size:1.15rem"></i> Falar com o Suporte
+    </a>
+
+    <button type="button" class="btn btn-ghost btn-block btn-sm" onclick="fazerLogout()" style="color:var(--text-soft)">
+      <i class="fas fa-sign-out-alt"></i> Sair da Conta
+    </button>
+  </div>
+</div>
+
 <!-- HEADER -->
 <header id="mainHeader" style="display:none">
   <div class="header-title">
@@ -560,12 +602,12 @@ label.field-label{display:block;font-size:.72rem;font-weight:600;color:var(--tex
     </div>
 
     <div class="card">
-      <h3><i class="fab fa-whatsapp" style="color:#25D366"></i> Suporte e Ajuda</h3>
-      <p style="font-size:.85rem;color:var(--text-soft);margin-bottom:12px;line-height:1.4">
-        Dúvidas sobre sua conta, liberação de acesso ou suporte técnico? Fale com a nossa equipe no WhatsApp.
+      <h3><i class="fab fa-whatsapp" style="color:#25D366"></i> Suporte</h3>
+      <p style="font-size:.82rem;color:var(--text-soft);margin-bottom:12px;line-height:1.4">
+        Dúvidas sobre sua conta ou liberação de acesso? Fale com a nossa equipe.
       </p>
-      <a href="https://wa.me/233505417501?text=Ol%C3%A1%2C+preciso+de+suporte+no+My+Studio+Pro" target="_blank" rel="noopener noreferrer" class="btn btn-block" style="background:#25D366;color:#ffffff;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:600;text-decoration:none">
-        <i class="fab fa-whatsapp" style="font-size:1.1rem"></i> WhatsApp de Suporte (+233 50 541 7501)
+      <a href="https://wa.me/233505417501?text=Ol%C3%A1%2C+preciso+de+suporte+no+My+Studio+Pro" target="_blank" rel="noopener noreferrer" class="btn btn-outline btn-block" style="text-decoration:none">
+        <i class="fab fa-whatsapp" style="color:#25D366;font-size:1.15rem"></i> Falar com o Suporte
       </a>
     </div>
 
@@ -980,26 +1022,196 @@ document.getElementById('formAuth').addEventListener('submit', async (e)=>{
     btn.innerText=orig; btn.disabled=false;
   }
 });
-window.fazerLogout = ()=>{ if(confirm('Sair da conta?')) signOut(auth); };
+/* ---------- CONTROLE DE ACESSO E ASSINATURA (30 DIAS) ---------- */
+const LINK_CHECKOUT = ''; // Link de checkout em branco (será atualizado à tarde)
+const WHATSAPP_SUPORTE = '233505417501';
+
+let appIniciado = false;
+let unsubAssinatura = null;
+
+function liberarAcesso(user){
+  const paywall = document.getElementById('paywallScreen');
+  if(paywall) paywall.style.display = 'none';
+
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('mainHeader').style.display = 'flex';
+  document.getElementById('mainContainer').style.display = 'block';
+  document.getElementById('mainNav').style.display = 'flex';
+
+  if(!appIniciado){
+    appIniciado = true;
+    iniciar(user.uid);
+  }
+}
+
+function bloquearAcesso(user, motivo, dataExp){
+  unsubs.forEach(u=>u());
+  unsubs = [];
+  appIniciado = false;
+
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('mainHeader').style.display = 'none';
+  document.getElementById('mainContainer').style.display = 'none';
+  document.getElementById('mainNav').style.display = 'none';
+
+  const paywall = document.getElementById('paywallScreen');
+  if(paywall) paywall.style.display = 'flex';
+
+  const emailEl = document.getElementById('paywallUserEmail');
+  if(emailEl) emailEl.innerText = user.email || '';
+
+  const badge = document.getElementById('paywallStatusBadge');
+  const sub = document.getElementById('paywallSubtitle');
+  const info = document.getElementById('paywallInfoText');
+
+  if(motivo === 'expirado'){
+    if(badge){ badge.className = 'tag tag-red'; badge.innerText = 'Expirado'; }
+    if(sub) sub.innerText = 'Sua assinatura de 30 dias expirou.';
+    if(info){
+      const dataStr = dataExp ? dataExp.toLocaleDateString('pt-BR') : '';
+      info.innerHTML = `Seu acesso encerrou em <b>${dataStr}</b>. Renove agora para continuar gerenciando seu estúdio.`;
+    }
+  } else {
+    if(badge){ badge.className = 'tag tag-red'; badge.innerText = 'Pendente'; }
+    if(sub) sub.innerText = 'Acesso exclusivo para assinantes.';
+    if(info) info.innerHTML = 'Este aplicativo não possui período de teste gratuito. Para liberar seu acesso de 30 dias, realize o pagamento ou confirme sua liberação com o suporte.';
+  }
+
+  const btnCheckout = document.getElementById('btnCheckoutPaywall');
+  if(btnCheckout){
+    if(LINK_CHECKOUT && LINK_CHECKOUT.trim() !== '' && LINK_CHECKOUT !== '#'){
+      btnCheckout.href = LINK_CHECKOUT;
+      btnCheckout.onclick = null;
+    } else {
+      btnCheckout.href = '#';
+      btnCheckout.onclick = (e)=>{
+        e.preventDefault();
+        alert('O link de checkout está sendo configurado. Por favor, entre em contato pelo suporte no WhatsApp abaixo para adquirir ou renovar seu acesso.');
+      };
+    }
+  }
+
+  const btnSuporte = document.getElementById('btnSuportePaywall');
+  if(btnSuporte){
+    const texto = encodeURIComponent(`Olá, realizei o pagamento do My Studio Pro e aguardo a liberação de acesso para o e-mail: ${user.email}`);
+    btnSuporte.href = `https://wa.me/${WHATSAPP_SUPORTE}?text=${texto}`;
+  }
+}
+
+function monitorarAssinatura(user){
+  if(unsubAssinatura){
+    unsubAssinatura();
+    unsubAssinatura = null;
+  }
+  const email = (user.email || '').toLowerCase().trim();
+
+  function processarDadosAssinatura(dados){
+    if(!dados){
+      bloquearAcesso(user, 'pendente');
+      return;
+    }
+    const status = String(dados.status || dados.statusAssinatura || '').toLowerCase().trim();
+    const statusValido = ['ativo', 'ativa', 'liberado', 'liberada', 'pago', 'active', 'approved'].includes(status);
+    if(!statusValido){
+      bloquearAcesso(user, 'bloqueado');
+      return;
+    }
+
+    const exp = dados.dataExpiracao || dados.expiraEm || dados.validade || dados.dataFim;
+    if(exp){
+      const dataExp = exp.toDate ? exp.toDate() : new Date(exp);
+      if(!isNaN(dataExp.getTime()) && new Date() > dataExp){
+        bloquearAcesso(user, 'expirado', dataExp);
+        return;
+      }
+    }
+
+    liberarAcesso(user);
+  }
+
+  try {
+    let unsubsLocais = [];
+    const q = query(collection(db, 'assinaturas'), where('email', '==', email));
+    unsubsLocais.push(onSnapshot(q, snap=>{
+      if(!snap.empty){
+        processarDadosAssinatura(snap.docs[0].data());
+      } else {
+        try {
+          unsubsLocais.push(onSnapshot(doc(db, 'assinaturas', email), docSnap=>{
+            if(docSnap.exists()){
+              processarDadosAssinatura(docSnap.data());
+            } else {
+              try {
+                unsubsLocais.push(onSnapshot(doc(db, 'configuracoes', user.uid), confSnap=>{
+                  if(confSnap.exists() && (confSnap.data().status === 'ativo' || confSnap.data().statusAssinatura === 'ativo')){
+                    processarDadosAssinatura(confSnap.data());
+                  } else {
+                    bloquearAcesso(user, 'pendente');
+                  }
+                }, ()=>bloquearAcesso(user, 'pendente')));
+              } catch(e){
+                bloquearAcesso(user, 'pendente');
+              }
+            }
+          }, ()=>bloquearAcesso(user, 'pendente')));
+        } catch(e){
+          bloquearAcesso(user, 'pendente');
+        }
+      }
+    }, err=>{
+      console.warn('[Assinatura] Query falhou, tentando doc direto:', err);
+      try {
+        unsubsLocais.push(onSnapshot(doc(db, 'assinaturas', email), docSnap=>{
+          if(docSnap.exists()){
+            processarDadosAssinatura(docSnap.data());
+          } else {
+            bloquearAcesso(user, 'pendente');
+          }
+        }, ()=>bloquearAcesso(user, 'pendente')));
+      } catch(e){
+        bloquearAcesso(user, 'pendente');
+      }
+    }));
+
+    unsubAssinatura = ()=>{
+      unsubsLocais.forEach(fn=>{ try{ fn(); }catch(e){} });
+      unsubsLocais = [];
+    };
+  } catch(e){
+    console.warn('[Assinatura] Erro:', e);
+    bloquearAcesso(user, 'pendente');
+  }
+}
+
+window.fazerLogout = ()=>{
+  if(confirm('Sair da conta?')){
+    if(unsubAssinatura){ unsubAssinatura(); unsubAssinatura = null; }
+    unsubs.forEach(u=>u()); unsubs = [];
+    appIniciado = false;
+    signOut(auth);
+  }
+};
 
 onAuthStateChanged(auth, user=>{
   if(user){
     usuarioLogado = user;
-    document.getElementById('authScreen').style.display='none';
-    document.getElementById('mainHeader').style.display='flex';
-    document.getElementById('mainContainer').style.display='block';
-    document.getElementById('mainNav').style.display='flex';
-    iniciar(user.uid);
+    monitorarAssinatura(user);
   } else {
     usuarioLogado = null;
-    unsubs.forEach(u=>u()); unsubs=[];
-    dados.servicos=[]; dados.clientes=[]; dados.agendamentos=[]; dados.transacoes=[];
-    document.getElementById('authScreen').style.display='flex';
-    document.getElementById('mainHeader').style.display='none';
-    document.getElementById('mainContainer').style.display='none';
-    document.getElementById('mainNav').style.display='none';
-    document.getElementById('btnAuthAction').innerText='Entrar';
-    document.getElementById('btnAuthAction').disabled=false;
+    if(unsubAssinatura){ unsubAssinatura(); unsubAssinatura = null; }
+    unsubs.forEach(u=>u()); unsubs = [];
+    appIniciado = false;
+    dados.servicos = []; dados.clientes = []; dados.agendamentos = []; dados.transacoes = [];
+
+    const paywall = document.getElementById('paywallScreen');
+    if(paywall) paywall.style.display = 'none';
+
+    document.getElementById('authScreen').style.display = 'flex';
+    document.getElementById('mainHeader').style.display = 'none';
+    document.getElementById('mainContainer').style.display = 'none';
+    document.getElementById('mainNav').style.display = 'none';
+    document.getElementById('btnAuthAction').innerText = 'Entrar';
+    document.getElementById('btnAuthAction').disabled = false;
     document.getElementById('formAuth').reset();
   }
 });
