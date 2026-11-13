@@ -531,9 +531,14 @@ label.field-label{display:block;font-size:.72rem;font-weight:600;color:var(--tex
       <p style="font-size:.85rem;color:var(--text-2);margin-bottom:4px" id="ajustesValidadeAssinatura">
         Calculando validade...
       </p>
-      <p style="font-size:.75rem;color:var(--text-soft)">
-        Acesso de 30 dias aos recursos do My Studio Pro.
-      </p>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">
+        <p style="font-size:.75rem;color:var(--text-soft);margin:0">
+          Acesso aos recursos do My Studio Pro.
+        </p>
+        <a id="btnRenovarAjustes" href="#" target="_blank" class="btn btn-outline btn-xs" style="text-decoration:none;border-color:var(--border-strong);color:var(--primary-dark)">
+          <i class="fas fa-sync-alt"></i> Renovar
+        </a>
+      </div>
     </div>
 
     <div class="card">
@@ -1012,7 +1017,7 @@ window.addEventListener('popstate', e=>{
 window.toggleAuthMode = function(){
   authMode = authMode==='login' ? 'register' : 'login';
   document.getElementById('authTitle').innerText = authMode==='login' ? 'My Studio Pro' : 'Criar Conta';
-  document.getElementById('authSubtitle').innerText = authMode==='login' ? 'Gestão premium para seu estúdio' : 'Comece agora, é grátis';
+  document.getElementById('authSubtitle').innerText = authMode==='login' ? 'Gestão premium para seu estúdio' : 'Crie sua conta para acessar seu estúdio';
   document.getElementById('btnAuthAction').innerText = authMode==='login' ? 'Entrar' : 'Cadastrar';
   document.getElementById('btnToggleAuth').innerText = authMode==='login' ? 'Não tem conta? Criar agora' : 'Já tem conta? Fazer Login';
 };
@@ -1037,8 +1042,14 @@ document.getElementById('formAuth').addEventListener('submit', async (e)=>{
   }
 });
 /* ---------- CONTROLE DE ACESSO E ASSINATURA (30 DIAS) ---------- */
-const LINK_CHECKOUT = ''; // Link de checkout em branco (será atualizado à tarde)
+const BASE_CHECKOUT = 'https://app.mivvo.com.br/checkout/01a1d5c1-dae1-77f6-ba3b-5590b31b7b9a?src=RENOVACAO';
 const WHATSAPP_SUPORTE = '233505417501';
+
+function gerarLinkCheckout(email){
+  const emailLimpo = (email || '').trim();
+  if(!emailLimpo) return BASE_CHECKOUT;
+  return `${BASE_CHECKOUT}&email=${encodeURIComponent(emailLimpo)}`;
+}
 
 let appIniciado = false;
 let unsubAssinatura = null;
@@ -1055,6 +1066,7 @@ function liberarAcesso(user, diasRestantes, dataExp){
   // Atualiza o card de assinatura na aba Ajustes
   const badgeAjustes = document.getElementById('ajustesStatusAssinatura');
   const validadeAjustes = document.getElementById('ajustesValidadeAssinatura');
+  const btnRenovarAjustes = document.getElementById('btnRenovarAjustes');
   if(badgeAjustes){
     badgeAjustes.className = 'tag tag-green';
     badgeAjustes.innerText = 'Ativa';
@@ -1063,6 +1075,9 @@ function liberarAcesso(user, diasRestantes, dataExp){
     const dataFmt = dataExp.toLocaleDateString('pt-BR');
     const textoDias = diasRestantes === 1 ? '1 dia' : `${diasRestantes} dias`;
     validadeAjustes.innerHTML = `Válida por mais <b>${textoDias}</b> (até ${dataFmt})`;
+  }
+  if(btnRenovarAjustes){
+    btnRenovarAjustes.href = gerarLinkCheckout(user.email);
   }
 
   if(!appIniciado){
@@ -1089,21 +1104,13 @@ function bloquearAcesso(user, dataExp){
 
   const btnCheckout = document.getElementById('btnCheckoutPaywall');
   if(btnCheckout){
-    if(LINK_CHECKOUT && LINK_CHECKOUT.trim() !== '' && LINK_CHECKOUT !== '#'){
-      btnCheckout.href = LINK_CHECKOUT;
-      btnCheckout.onclick = null;
-    } else {
-      btnCheckout.href = '#';
-      btnCheckout.onclick = (e)=>{
-        e.preventDefault();
-        alert('O link de renovação está sendo configurado. Por favor, fale com o suporte pelo WhatsApp para renovar seu acesso.');
-      };
-    }
+    btnCheckout.href = gerarLinkCheckout(user.email);
+    btnCheckout.onclick = null;
   }
 
   const btnSuporte = document.getElementById('btnSuportePaywall');
   if(btnSuporte){
-    const texto = encodeURIComponent(`Olá, preciso renovar meu plano no My Studio Pro para o e-mail: ${user.email}`);
+    const texto = encodeURIComponent(`Olá, preciso de suporte na renovação do My Studio Pro para o e-mail: ${user.email}`);
     btnSuporte.href = `https://wa.me/${WHATSAPP_SUPORTE}?text=${texto}`;
   }
 }
@@ -1114,45 +1121,65 @@ function gerenciarAcesso30Dias(user){
     unsubAssinatura = null;
   }
   const email = (user.email || '').toLowerCase().trim();
+  const uid = user.uid;
+
+  const refConfig = doc(db, 'configuracoes', uid);
   const refAssinatura = doc(db, 'assinaturas', email);
 
-  unsubAssinatura = onSnapshot(refAssinatura, async snap=>{
+  unsubAssinatura = onSnapshot(refConfig, async snap=>{
     const agora = new Date();
+    const dados = snap.exists() ? snap.data() : {};
 
-    // Se NÃO tem documento ou ainda não tem dataExpiracao:
-    // É primeiro acesso (ou usuário antigo ganhando 30 dias a partir de agora)!
-    if(!snap.exists() || !snap.data() || !snap.data().dataExpiracao){
-      const dataExp = new Date(agora.getTime() + (30 * 24 * 60 * 60 * 1000)); // +30 dias a partir de agora
-      const dadosIniciais = {
+    // Se NÃO tem dataExpiracao:
+    // Inicializa 30 dias a partir de agora!
+    if(!dados.dataExpiracao){
+      const dataExp = new Date(agora.getTime() + (30 * 24 * 60 * 60 * 1000));
+      const camposIniciais = {
         email: email,
-        uid: user.uid,
+        uid: uid,
         status: 'ativo',
-        criadoEm: (snap.exists() && snap.data()?.criadoEm) ? snap.data().criadoEm : agora.toISOString(),
+        statusAssinatura: 'ativo',
         dataInicioAcesso: agora.toISOString(),
         dataExpiracao: dataExp.toISOString(),
         diasRestantes: 30,
         ultimoLogin: agora.toISOString()
       };
+
+      // 1. Grava no documento configuracoes/{uid} (garantido pelas regras do Firestore)
       try {
-        await setDoc(refAssinatura, dadosIniciais, { merge: true });
+        await setDoc(refConfig, camposIniciais, { merge: true });
       } catch(e){
-        console.warn('[Assinatura] Aviso ao inicializar 30 dias:', e);
+        console.error('[Assinatura] Erro ao gravar configuracoes:', e);
       }
+
+      // 2. Grava também em assinaturas/{email} para busca por email
+      try {
+        await setDoc(refAssinatura, { ...camposIniciais, criadoEm: agora.toISOString() }, { merge: true });
+      } catch(e){
+        console.warn('[Assinatura] Aviso ao gravar assinaturas:', e);
+      }
+
       liberarAcesso(user, 30, dataExp);
       return;
     }
 
-    const dados = snap.data();
     const dataExp = new Date(dados.dataExpiracao);
     const diffMs = dataExp.getTime() - agora.getTime();
     const diasRestantes = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
 
-    // Atualiza diasRestantes e ultimoLogin no Firestore para visualização no painel
+    // Atualiza diasRestantes se mudou
     if(dados.diasRestantes !== diasRestantes){
-      updateDoc(refAssinatura, {
+      setDoc(refConfig, {
         diasRestantes: diasRestantes,
-        ultimoLogin: agora.toISOString()
-      }).catch(()=>{});
+        ultimoLogin: agora.toISOString(),
+        email: email
+      }, { merge: true }).catch(()=>{});
+
+      setDoc(refAssinatura, {
+        diasRestantes: diasRestantes,
+        ultimoLogin: agora.toISOString(),
+        email: email
+      }, { merge: true }).catch(()=>{});
     }
 
     // Se venceu os 30 dias:
@@ -1162,7 +1189,7 @@ function gerenciarAcesso30Dias(user){
       liberarAcesso(user, diasRestantes, dataExp);
     }
   }, err=>{
-    console.warn('[Assinatura] Erro no listener, liberando acesso:', err);
+    console.warn('[Assinatura] Erro no listener:', err);
     const expPadrao = new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
     liberarAcesso(user, 30, expPadrao);
   });
