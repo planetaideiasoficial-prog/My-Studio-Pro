@@ -309,35 +309,35 @@ label.field-label{display:block;font-size:.72rem;font-weight:600;color:var(--tex
   </div>
 </div>
 
-<!-- TELA DE BLOQUEIO / RENOVAÇÃO DE ASSINATURA -->
+<!-- TELA DE BLOQUEIO / PLANO EXPIRADO -->
 <div class="auth-screen" id="paywallScreen" style="display:none">
   <div class="auth-box" style="max-width:420px;text-align:center">
     <div class="logo-badge" style="background:linear-gradient(135deg,var(--gold),var(--primary))">
-      <i class="fas fa-crown"></i>
+      <i class="fas fa-hourglass-end"></i>
     </div>
-    <h1 style="font-size:1.5rem;margin-bottom:6px">Acesso ao My Studio Pro</h1>
-    <p class="subtitle" style="margin-bottom:18px" id="paywallSubtitle">
-      Assinatura necessária para utilizar o aplicativo.
+    <h1 style="font-size:1.5rem;margin-bottom:8px">Seu Plano Expirou</h1>
+    <p class="subtitle" style="margin-bottom:18px;color:var(--text-soft)">
+      Seu período de 30 dias de acesso foi finalizado.
     </p>
 
-    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;text-align:left;font-size:.82rem">
+    <div style="background:var(--surface-2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;text-align:left;font-size:.84rem">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <span style="color:var(--text-soft)">Conta:</span>
         <strong id="paywallUserEmail" style="word-break:break-all;color:var(--text)"></strong>
       </div>
       <div style="display:flex;justify-content:space-between;align-items:center">
         <span style="color:var(--text-soft)">Status:</span>
-        <span id="paywallStatusBadge" class="tag tag-red">Pendente</span>
+        <span class="tag tag-red">Expirado</span>
       </div>
     </div>
 
-    <p id="paywallInfoText" style="font-size:.85rem;color:var(--text-2);margin-bottom:20px;line-height:1.4">
-      Este aplicativo não possui período de teste gratuito. Para liberar seu acesso, adquira ou renove seu plano de 30 dias.
+    <p style="font-size:.88rem;color:var(--text-2);margin-bottom:20px;line-height:1.5">
+      Para continuar utilizando o aplicativo e gerenciando seu estúdio, realize a renovação do seu acesso.
     </p>
 
-    <!-- BOTAO CHECKOUT (link configuravel) -->
+    <!-- BOTAO RENOVAR CHECKOUT (link configuravel) -->
     <a href="#" id="btnCheckoutPaywall" target="_blank" class="btn btn-primary btn-block" style="text-decoration:none;font-weight:600;margin-bottom:10px">
-      <i class="fas fa-lock-open"></i> Renovar / Adquirir Acesso
+      <i class="fas fa-sync-alt"></i> Renovar Acesso
     </a>
 
     <!-- SUPORTE DISCRETO -->
@@ -521,6 +521,20 @@ label.field-label{display:block;font-size:.72rem;font-weight:600;color:var(--tex
   <div id="tab-ajustes" class="tab-content">
     <div class="section-title">Ajustes</div>
     <p class="section-sub">Personalize seu estúdio</p>
+
+    <!-- STATUS DA ASSINATURA -->
+    <div class="card" id="cardAssinaturaAjustes">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <h3 style="margin-bottom:0"><i class="fas fa-crown" style="color:var(--gold)"></i> Sua Assinatura</h3>
+        <span class="tag tag-green" id="ajustesStatusAssinatura">Ativa</span>
+      </div>
+      <p style="font-size:.85rem;color:var(--text-2);margin-bottom:4px" id="ajustesValidadeAssinatura">
+        Calculando validade...
+      </p>
+      <p style="font-size:.75rem;color:var(--text-soft)">
+        Acesso de 30 dias aos recursos do My Studio Pro.
+      </p>
+    </div>
 
     <div class="card">
       <h3><i class="fas fa-building" style="color:var(--primary)"></i> Dados do Estúdio</h3>
@@ -1029,7 +1043,7 @@ const WHATSAPP_SUPORTE = '233505417501';
 let appIniciado = false;
 let unsubAssinatura = null;
 
-function liberarAcesso(user){
+function liberarAcesso(user, diasRestantes, dataExp){
   const paywall = document.getElementById('paywallScreen');
   if(paywall) paywall.style.display = 'none';
 
@@ -1038,13 +1052,26 @@ function liberarAcesso(user){
   document.getElementById('mainContainer').style.display = 'block';
   document.getElementById('mainNav').style.display = 'flex';
 
+  // Atualiza o card de assinatura na aba Ajustes
+  const badgeAjustes = document.getElementById('ajustesStatusAssinatura');
+  const validadeAjustes = document.getElementById('ajustesValidadeAssinatura');
+  if(badgeAjustes){
+    badgeAjustes.className = 'tag tag-green';
+    badgeAjustes.innerText = 'Ativa';
+  }
+  if(validadeAjustes && dataExp){
+    const dataFmt = dataExp.toLocaleDateString('pt-BR');
+    const textoDias = diasRestantes === 1 ? '1 dia' : `${diasRestantes} dias`;
+    validadeAjustes.innerHTML = `Válida por mais <b>${textoDias}</b> (até ${dataFmt})`;
+  }
+
   if(!appIniciado){
     appIniciado = true;
     iniciar(user.uid);
   }
 }
 
-function bloquearAcesso(user, motivo, dataExp){
+function bloquearAcesso(user, dataExp){
   unsubs.forEach(u=>u());
   unsubs = [];
   appIniciado = false;
@@ -1060,23 +1087,6 @@ function bloquearAcesso(user, motivo, dataExp){
   const emailEl = document.getElementById('paywallUserEmail');
   if(emailEl) emailEl.innerText = user.email || '';
 
-  const badge = document.getElementById('paywallStatusBadge');
-  const sub = document.getElementById('paywallSubtitle');
-  const info = document.getElementById('paywallInfoText');
-
-  if(motivo === 'expirado'){
-    if(badge){ badge.className = 'tag tag-red'; badge.innerText = 'Expirado'; }
-    if(sub) sub.innerText = 'Sua assinatura de 30 dias expirou.';
-    if(info){
-      const dataStr = dataExp ? dataExp.toLocaleDateString('pt-BR') : '';
-      info.innerHTML = `Seu acesso encerrou em <b>${dataStr}</b>. Renove agora para continuar gerenciando seu estúdio.`;
-    }
-  } else {
-    if(badge){ badge.className = 'tag tag-red'; badge.innerText = 'Pendente'; }
-    if(sub) sub.innerText = 'Acesso exclusivo para assinantes.';
-    if(info) info.innerHTML = 'Este aplicativo não possui período de teste gratuito. Para liberar seu acesso de 30 dias, realize o pagamento ou confirme sua liberação com o suporte.';
-  }
-
   const btnCheckout = document.getElementById('btnCheckoutPaywall');
   if(btnCheckout){
     if(LINK_CHECKOUT && LINK_CHECKOUT.trim() !== '' && LINK_CHECKOUT !== '#'){
@@ -1086,101 +1096,76 @@ function bloquearAcesso(user, motivo, dataExp){
       btnCheckout.href = '#';
       btnCheckout.onclick = (e)=>{
         e.preventDefault();
-        alert('O link de checkout está sendo configurado. Por favor, entre em contato pelo suporte no WhatsApp abaixo para adquirir ou renovar seu acesso.');
+        alert('O link de renovação está sendo configurado. Por favor, fale com o suporte pelo WhatsApp para renovar seu acesso.');
       };
     }
   }
 
   const btnSuporte = document.getElementById('btnSuportePaywall');
   if(btnSuporte){
-    const texto = encodeURIComponent(`Olá, realizei o pagamento do My Studio Pro e aguardo a liberação de acesso para o e-mail: ${user.email}`);
+    const texto = encodeURIComponent(`Olá, preciso renovar meu plano no My Studio Pro para o e-mail: ${user.email}`);
     btnSuporte.href = `https://wa.me/${WHATSAPP_SUPORTE}?text=${texto}`;
   }
 }
 
-function monitorarAssinatura(user){
+function gerenciarAcesso30Dias(user){
   if(unsubAssinatura){
     unsubAssinatura();
     unsubAssinatura = null;
   }
   const email = (user.email || '').toLowerCase().trim();
+  const refAssinatura = doc(db, 'assinaturas', email);
 
-  function processarDadosAssinatura(dados){
-    if(!dados){
-      bloquearAcesso(user, 'pendente');
-      return;
-    }
-    const status = String(dados.status || dados.statusAssinatura || '').toLowerCase().trim();
-    const statusValido = ['ativo', 'ativa', 'liberado', 'liberada', 'pago', 'active', 'approved'].includes(status);
-    if(!statusValido){
-      bloquearAcesso(user, 'bloqueado');
-      return;
-    }
+  unsubAssinatura = onSnapshot(refAssinatura, async snap=>{
+    const agora = new Date();
 
-    const exp = dados.dataExpiracao || dados.expiraEm || dados.validade || dados.dataFim;
-    if(exp){
-      const dataExp = exp.toDate ? exp.toDate() : new Date(exp);
-      if(!isNaN(dataExp.getTime()) && new Date() > dataExp){
-        bloquearAcesso(user, 'expirado', dataExp);
-        return;
-      }
-    }
-
-    liberarAcesso(user);
-  }
-
-  try {
-    let unsubsLocais = [];
-    const q = query(collection(db, 'assinaturas'), where('email', '==', email));
-    unsubsLocais.push(onSnapshot(q, snap=>{
-      if(!snap.empty){
-        processarDadosAssinatura(snap.docs[0].data());
-      } else {
-        try {
-          unsubsLocais.push(onSnapshot(doc(db, 'assinaturas', email), docSnap=>{
-            if(docSnap.exists()){
-              processarDadosAssinatura(docSnap.data());
-            } else {
-              try {
-                unsubsLocais.push(onSnapshot(doc(db, 'configuracoes', user.uid), confSnap=>{
-                  if(confSnap.exists() && (confSnap.data().status === 'ativo' || confSnap.data().statusAssinatura === 'ativo')){
-                    processarDadosAssinatura(confSnap.data());
-                  } else {
-                    bloquearAcesso(user, 'pendente');
-                  }
-                }, ()=>bloquearAcesso(user, 'pendente')));
-              } catch(e){
-                bloquearAcesso(user, 'pendente');
-              }
-            }
-          }, ()=>bloquearAcesso(user, 'pendente')));
-        } catch(e){
-          bloquearAcesso(user, 'pendente');
-        }
-      }
-    }, err=>{
-      console.warn('[Assinatura] Query falhou, tentando doc direto:', err);
+    // Se NÃO tem documento ou ainda não tem dataExpiracao:
+    // É primeiro acesso (ou usuário antigo ganhando 30 dias a partir de agora)!
+    if(!snap.exists() || !snap.data() || !snap.data().dataExpiracao){
+      const dataExp = new Date(agora.getTime() + (30 * 24 * 60 * 60 * 1000)); // +30 dias a partir de agora
+      const dadosIniciais = {
+        email: email,
+        uid: user.uid,
+        status: 'ativo',
+        criadoEm: (snap.exists() && snap.data()?.criadoEm) ? snap.data().criadoEm : agora.toISOString(),
+        dataInicioAcesso: agora.toISOString(),
+        dataExpiracao: dataExp.toISOString(),
+        diasRestantes: 30,
+        ultimoLogin: agora.toISOString()
+      };
       try {
-        unsubsLocais.push(onSnapshot(doc(db, 'assinaturas', email), docSnap=>{
-          if(docSnap.exists()){
-            processarDadosAssinatura(docSnap.data());
-          } else {
-            bloquearAcesso(user, 'pendente');
-          }
-        }, ()=>bloquearAcesso(user, 'pendente')));
+        await setDoc(refAssinatura, dadosIniciais, { merge: true });
       } catch(e){
-        bloquearAcesso(user, 'pendente');
+        console.warn('[Assinatura] Aviso ao inicializar 30 dias:', e);
       }
-    }));
+      liberarAcesso(user, 30, dataExp);
+      return;
+    }
 
-    unsubAssinatura = ()=>{
-      unsubsLocais.forEach(fn=>{ try{ fn(); }catch(e){} });
-      unsubsLocais = [];
-    };
-  } catch(e){
-    console.warn('[Assinatura] Erro:', e);
-    bloquearAcesso(user, 'pendente');
-  }
+    const dados = snap.data();
+    const dataExp = new Date(dados.dataExpiracao);
+    const diffMs = dataExp.getTime() - agora.getTime();
+    const diasRestantes = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+
+    // Atualiza diasRestantes e ultimoLogin no Firestore para visualização no painel
+    if(dados.diasRestantes !== diasRestantes){
+      updateDoc(refAssinatura, {
+        diasRestantes: diasRestantes,
+        ultimoLogin: agora.toISOString()
+      }).catch(()=>{});
+    }
+
+    // Se venceu os 30 dias:
+    if(agora > dataExp && dados.status !== 'ativo_vitalicio'){
+      bloquearAcesso(user, dataExp);
+    } else {
+      liberarAcesso(user, diasRestantes, dataExp);
+    }
+  }, err=>{
+    console.warn('[Assinatura] Erro no listener, liberando acesso:', err);
+    const expPadrao = new Date(Date.now() + (30 * 24 * 60 * 60 * 1000));
+    liberarAcesso(user, 30, expPadrao);
+  });
 }
 
 window.fazerLogout = ()=>{
@@ -1195,7 +1180,7 @@ window.fazerLogout = ()=>{
 onAuthStateChanged(auth, user=>{
   if(user){
     usuarioLogado = user;
-    monitorarAssinatura(user);
+    gerenciarAcesso30Dias(user);
   } else {
     usuarioLogado = null;
     if(unsubAssinatura){ unsubAssinatura(); unsubAssinatura = null; }
